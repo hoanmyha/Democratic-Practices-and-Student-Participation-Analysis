@@ -121,7 +121,9 @@ Main steps:
    - inclusion by involvement status
    - considered judgment
    - transparency
-
+![Chart](figures/survey/figure1.png)
+![Chart](figures/survey/figure4.2.png)
+![Chart](figures/survey/figure5.png)
 ### Historical Observer Analysis
 
 The Observer analysis used coded archival data to examine student power over time.
@@ -141,7 +143,10 @@ Main steps:
 6. Convert topic and actor columns into long format.
 7. Calculate topic-level and actor-level summaries.
 8. Create publication-style charts and tables.
-
+![Chart](figures/observer/figure1.png)
+![Chart](figures/observer/figure2.png)
+![Chart](figures/observer/figure3.png)
+![Chart](figures/observer/top_actors_table.png)
 ## Key Findings
 
 ### Contemporary Survey Findings
