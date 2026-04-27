@@ -1,0 +1,175 @@
+---
+title: "Survey data cleaning"
+author: "My Ha"
+date: "2026-04-05"
+output: html_document
+---
+
+```{r}
+#install.packages(c("readxl", "dplyr", "stringr", "tidyr"))
+```
+
+```{r}
+library(readxl)
+library(dplyr)
+library(stringr)
+library(tidyr)
+```
+
+```{r}
+df <- read_excel("Survey_Cleaning.xlsx")
+```
+```{r}
+#check data
+View(df)
+names(df)
+dim(df)
+
+#count num of column
+ncol(df)
+```
+```{r}
+#column names
+names(df)
+```
+
+```{r}
+demographic_cols <- c(
+  "Respondent_id",
+  "Timestamp",
+  "Which of the following best describes you?...23",
+  "Are you/were you involved at Augustana College in any of the categories below? Mark all that apply.",
+  "Which of the following best describes you?...25",
+  "Are you a",
+  "What is your gender identity?",
+  "What is your major(s)?"
+)
+```
+
+```{r}
+inclusiveness_cols <- c(
+  "As a group, domestically diverse students (who identify as People of Color) play a significant role in making important decisions at Augustana.",
+  "As a group, domestically diverse students (who identify as People of Color) are regularly included in spaces where important decisions are discussed.",
+  "International students are regularly included in spaces where important decisions are discussed.",
+  "Students at Augustana are regularly included in spaces where important decisions are discussed.",
+  "In general, Augustana College provides opportunities for students to express their opinions regarding important decisions."
+)
+```
+
+```{r}
+popular_control_cols <- c(
+  "Students play a significant role in making important decisions at Augustana.",
+  "International students play a significant role in making important decisions at Augustana.",
+  "In general, the opinions of students are taken into account by the school when decisions are made.",
+  "The Student Government Association (SGA) serves as an effective voice between the student body and the administration.",
+  "Students’ short tenure on campus often leads to their voices being overlooked or ignored compared to more permanent stakeholders (such as administrators, staff and faculty).",
+  "Student participation will slow down the process of making decisions at Augustana."
+)
+```
+
+```{r}
+considered_judgment_cols <- c(
+  "Most students do not have the ability to understand complex decisions that are made at Augustana that impact them (for example: changes to the curriculum or eliminating J-Term).",
+  "If provided with enough information, most students have the ability to understand complex decisions that are made here (For example: changes to the curriculum or eliminating J-Term).",
+  "Most students do not have access to the necessary information to weigh in on important decisions made at Augustana.",
+  "Most students feel that the time and effort required to participate in decision-making at Augustana is more than they can reasonably give.",
+  "Student input is often not sought because decision-makers (faculty, staff and/or administration) recognize the time constraints on students.",
+  "Most students have the time to participate in making important decisions at Augustana."
+)
+```
+
+```{r}
+transparency_cols <- c(
+  "Important decisions made by the college and that impact the lives of students are clearly communicated to the student body.",
+  "Important decisions made by the college and that impact the lives of students are communicated to the student body in a timely manner.",
+  "The reasoning and steps leading to major decisions made by the college are clearly explained to students."
+)
+```
+
+```{r}
+#Reorder the columns
+df_clean <- df %>%
+  select(
+    all_of(demographic_cols),
+    all_of(inclusiveness_cols),
+    all_of(popular_control_cols),
+    all_of(considered_judgment_cols),
+    all_of(transparency_cols)
+  )
+
+names(df_clean)
+View(df_clean)
+```
+
+```{r}
+#Clean extra spaces inside responses
+df_clean <- df_clean %>%
+  mutate(across(where(is.character), ~str_squish(.)))
+```
+
+```{r}
+#Check missing values
+colSums(is.na(df_clean))
+```
+
+```{r}
+#Standardize blank values
+df_clean <- df_clean %>%
+  mutate(across(where(is.character), ~na_if(., "")))
+```
+
+```{r}
+#check if all the answer are unique, the only questin that has many overlap is major, but we dont have to do anything with that now
+lapply(df_clean[, 8:27], unique)
+```
+
+```{r}
+# In the yes no question, Clean the answer into binary (1 involved 0 not involved)
+df_clean <- df_clean %>%
+  mutate(`Are you/were you involved at Augustana College in any of the categories below? Mark all that apply.` =
+           str_squish(`Are you/were you involved at Augustana College in any of the categories below? Mark all that apply.`))
+#
+df_clean <- df_clean %>%
+  mutate(involved_any = ifelse(
+    is.na(`Are you/were you involved at Augustana College in any of the categories below? Mark all that apply.`),
+    0,
+    ifelse(
+      `Are you/were you involved at Augustana College in any of the categories below? Mark all that apply.` == "None",
+      0,
+      1
+    )
+  ))
+```
+
+```{r}
+#Rename confusing column names:
+df_clean <- df_clean %>%
+  rename(
+    student_status = `Which of the following best describes you?...23`,
+    race_ethnicity = `Which of the following best describes you?...25`,
+    class_year = `Are you a`
+  )
+#
+names(df_clean)
+```
+
+```{r}
+#check for dup
+sum(duplicated(df_clean))
+```
+
+```{r}
+#check how complete each response is
+df_clean$answered_count <- rowSums(!is.na(df_clean))
+View(df_clean)
+names(df_clean)
+colSums(is.na(df_clean))
+summary(df_clean$answered_count)
+```
+
+```{r}
+#save
+write.csv(df_clean, "cleaned_survey_data.csv", row.names = FALSE)
+saveRDS(df_clean, "cleaned_survey_data.rds")
+```
+

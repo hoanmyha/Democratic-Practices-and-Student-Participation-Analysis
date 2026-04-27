@@ -1,0 +1,738 @@
+---
+title: "Observer Analysis"
+author: "My Ha"
+date: "2026-03-26"
+output: html_document
+---
+```{r}
+# Install packages 
+#install.packages(c("tidyverse", "scales"))
+install.packages("readxl")
+
+# Load libraries
+library(tidyverse)  # for data manipulation and plotting
+library(scales)     # for percent formatting on x-axis
+library(readxl)
+```
+
+```{r}
+# Read CSV
+df_sheet3 <- read_excel("Observer Master.xlsx", sheet = 3)
+
+# Quick check
+glimpse(df_sheet3)
+```
+```{r}
+# Quick check
+colnames(df_sheet3)
+```
+
+```{r}
+#Calculate period midpoint & normalized time
+df_sheet3 <- df_sheet3 %>%
+  mutate(period_mid = (`Start Year` + `End Year`)/2) %>%
+  group_by(President) %>%
+  mutate(norm_time = (period_mid - min(`Start Year`)) / (max(`End Year`) - min(`Start Year`))) %>%
+  ungroup()
+```
+
+```{r}
+#fix missing values
+df_sheet3 <- df_sheet3 %>%
+  filter(!is.na(Progress), !is.na(period_mid))
+```
+
+
+```{r}
+#Aggregate progress per period
+df_summary <- df_sheet3 %>%
+  group_by(President, period_mid, norm_time) %>%
+  summarise(avg_progress = mean(Progress), .groups = "drop")
+```
+
+```{r}
+#Plot normalized progress line chart
+library(ggplot2)
+library(scales)  # for percent formatting on x-axis
+
+ggplot(df_summary, aes(x = norm_time, y = avg_progress, color = President, group = President)) +
+  geom_line(size = 1.2) +       # line for each president
+  geom_point(size = 3) +        # points at each period
+  scale_x_continuous(labels = percent_format(accuracy = 1)) +  # 0% → 100%
+  labs(
+    x = "Presidential Timeline (%)",
+    y = "Average Progress",
+    title = "Power Progress of Presidents Over Normalized Time"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "bottom"
+  )
+```
+
+
+```{r}
+df_clean <- df_sheet3 %>%
+  filter(!is.na(Progress), !is.na(period_mid)) %>%
+  group_by(President, period_mid) %>%
+  summarise(Progress = mean(Progress), .groups = "drop") %>%
+  mutate(President = factor(President, levels = c("Ber", "Sor", "Tre", "Bah"))) %>%  # <-- added
+  arrange(period_mid)
+
+ggplot(df_clean, aes(x = period_mid, y = Progress, color = President)) +
+  geom_point(size = 4) +
+  geom_line(aes(group = 1), color = "black", linewidth = 1) +
+  labs(
+    title = "Power Progress over Time",
+    x = "Time",
+    y = "Power Progress"
+  ) +
+  scale_y_continuous(limits = c(0, 4)) + 
+  theme_minimal(base_size = 14)
+```
+
+```{r}
+df_clean <- df_sheet3 %>%
+  filter(!is.na(Progress), !is.na(period_mid)) %>%
+  group_by(President, period_mid) %>%
+  summarise(Progress = mean(Progress), .groups = "drop") %>%
+  mutate(President = factor(President, levels = c("Ber", "Sor", "Tre", "Bah"))) %>%
+  arrange(period_mid)
+
+ggplot(df_clean, aes(x = period_mid, y = Progress, color = President)) +
+  geom_line(aes(group = 1), color = "#4D4D4D", linewidth = 1.05) +
+  geom_point(size = 3.8) +
+  labs(
+    title = "Power Progress over Time",
+    subtitle = "Average progress score across presidential periods",
+    x = "Time",
+    y = "Power Progress",
+    color = NULL,
+    caption = "Source: Augustana archival analysis"
+  ) +
+  scale_color_manual(values = c(
+    "Ber" = "#1F5A94",
+    "Sor" = "#D97A2B",
+    "Tre" = "#4C9A2A",
+    "Bah" = "#C43C39"
+  )) +
+  scale_y_continuous(
+    limits = c(0, 4),
+    breaks = seq(0, 4, 1),
+    expand = c(0, 0)
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(
+      face = "bold",
+      size = 16,
+      hjust = 0,
+      margin = margin(b = 5)
+    ),
+    plot.subtitle = element_text(
+      size = 11,
+      color = "#555555",
+      hjust = 0,
+      margin = margin(b = 12)
+    ),
+    plot.caption = element_text(
+      size = 9.5,
+      color = "#666666",
+      hjust = 0,
+      margin = margin(t = 10)
+    ),
+    axis.title = element_text(
+      face = "bold",
+      size = 11.5,
+      color = "#222222"
+    ),
+    axis.text.x = element_text(
+      size = 10.5,
+      color = "#444444"
+    ),
+    axis.text.y = element_text(
+      size = 10.5,
+      color = "#444444"
+    ),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(
+      color = "#D9D9D9",
+      linewidth = 0.4
+    ),
+    axis.ticks = element_blank(),
+    legend.position = "top",
+    legend.text = element_text(
+      size = 10.5,
+      color = "#333333"
+    ),
+    plot.margin = margin(18, 24, 18, 12)
+  )
+
+ggsave("observer_figures/figure2.png", width = 8, height = 5, dpi = 300)
+```
+
+
+```{r}
+ggplot(df_sheet3, aes(x = norm_time, y = Progress)) +
+  geom_smooth(method = "loess", se = FALSE, color = "blue", size = 1.5) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  expand_limits(y = 0) +   # ensures y-axis starts at 0
+  labs(
+    x = "Presidential Timeline (%)",
+    y = "Average Progress",
+    title = "Overall Power Progress Across All Presidents"
+  ) +
+  theme_minimal(base_size = 14)
+```
+```{r}
+#Avg granted over time
+df_granted <- df_sheet3 %>%
+  filter(!is.na(Granted), !is.na(period_mid)) %>%
+  group_by(President, period_mid) %>%
+  summarise(Granted = mean(Granted), .groups = "drop") %>%
+  mutate(President = factor(President, levels = c("Ber", "Sor", "Tre", "Bah"))) %>%
+  arrange(period_mid)
+
+ggplot(df_granted, aes(x = period_mid, y = Granted, color = President)) +
+  geom_line(aes(group = 1), color = "#4D4D4D", linewidth = 1.05) +
+  geom_point(size = 3.8) +
+  labs(
+    title = "Granted Power over Time",
+    subtitle = "Average level of power granted to students across presidential periods",
+    x = "Time",
+    y = "Average Granted Power",
+    color = NULL,
+    caption = "Source: Augustana archival analysis"
+  ) +
+  scale_color_manual(values = c(
+    "Ber" = "#1F5A94",
+    "Sor" = "#D97A2B",
+    "Tre" = "#4C9A2A",
+    "Bah" = "#C43C39"
+  )) +
+  scale_y_continuous(
+    limits = c(0, 5),   # <-- IMPORTANT: Granted likely goes to 5
+    breaks = seq(0, 5, 1),
+    expand = c(0, 0)
+  ) +
+  scale_x_continuous(expand = c(0.02, 0)) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0, margin = margin(b = 5)),
+    plot.subtitle = element_text(size = 11, color = "#555555", hjust = 0, margin = margin(b = 12)),
+    plot.caption = element_text(size = 9.5, color = "#666666", hjust = 0, margin = margin(t = 10)),
+    axis.title = element_text(face = "bold", size = 11.5, color = "#222222"),
+    axis.text = element_text(size = 10.5, color = "#444444"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(color = "#D9D9D9", linewidth = 0.4),
+    axis.ticks = element_blank(),
+    legend.position = "top",
+    legend.text = element_text(size = 10.5),
+    plot.margin = margin(18, 18, 18, 12)
+  )
+
+ggsave("observer_figures/figure1.png", width = 8, height = 5, dpi = 300)
+```
+
+   
+```{r}
+#Granted and Gained by President
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+df_bar <- df_sheet3 %>%
+  group_by(President) %>%
+  summarise(
+    Granted = mean(Granted, na.rm = TRUE),
+    Gained  = mean(Gained, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = c(Granted, Gained),
+    names_to = "Power_Type",
+    values_to = "Value"
+  ) %>%
+  mutate(
+    Power_Type = factor(Power_Type, levels = c("Granted", "Gained")),
+    President = factor(President, levels = c("Ber", "Sor", "Tre", "Bah"))
+  )
+
+ggplot(df_bar, aes(x = President, y = Value, fill = Power_Type)) +
+  geom_col(
+    position = position_dodge(width = 0.72),
+    width = 0.56
+  ) +
+  geom_text(
+    aes(label = round(Value, 1)),
+    position = position_dodge(width = 0.72),
+    vjust = -0.35,
+    size = 4,
+    color = "#222222"
+  ) +
+  scale_fill_manual(values = c(
+    "Granted" = "#1F5A94",
+    "Gained"  = "#D97A2B"
+  )) +
+  scale_y_continuous(
+    limits = c(0, 5.2),
+    breaks = seq(0, 5, 1),
+    expand = c(0, 0)
+  ) +
+  labs(
+    title = "Granted vs. Gained Power by President",
+    x = NULL,
+    y = "Average Power Score",
+    fill = NULL,
+    caption = "Source: Augustana archival analysis"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(
+      face = "bold",
+      size = 16,
+      hjust = 0,
+      margin = margin(b = 5)
+    ),
+    plot.subtitle = element_text(
+      size = 11,
+      color = "#555555",
+      hjust = 0,
+      margin = margin(b = 12)
+    ),
+    plot.caption = element_text(
+      size = 9.5,
+      color = "#666666",
+      hjust = 0,
+      margin = margin(t = 10)
+    ),
+    axis.title.y = element_text(
+      face = "bold",
+      size = 11.5,
+      color = "#222222"
+    ),
+    axis.text.x = element_text(
+      size = 11,
+      color = "#222222"
+    ),
+    axis.text.y = element_text(
+      size = 10.5,
+      color = "#555555"
+    ),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(
+      color = "#D9D9D9",
+      linewidth = 0.4
+    ),
+    axis.ticks = element_blank(),
+    legend.position = "top",
+    legend.text = element_text(
+      size = 10.5,
+      color = "#333333"
+    ),
+    plot.margin = margin(18, 18, 18, 12)
+  )
+
+ggsave("observer_figures/figure3.png", width = 8, height = 5, dpi = 300)
+
+```
+
+
+```{r}
+# most common actors
+actor_counts <- df_sheet3 %>%
+  summarise(
+    `Student government leaders or members` = sum(`Student government leaders or members` == "T", na.rm = TRUE),
+    `Individual students` = sum(`Individual students` == "T", na.rm = TRUE),
+    `Student organizations or groups` = sum(`Student organizations or groups` == "T", na.rm = TRUE),
+    `Alumni` = sum(`Alumni` == "T", na.rm = TRUE),
+    `Administrators` = sum(`Administrators` == "T", na.rm = TRUE),
+    `Faculty` = sum(`Faculty` == "T", na.rm = TRUE)
+  ) %>%
+  pivot_longer(everything(), names_to = "Actor", values_to = "Count")
+
+ggplot(actor_counts, aes(x = reorder(Actor, Count), y = Count)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Most Common Actors",
+    x = "Actors",
+    y = "Number of Mentions"
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+```{r}
+# install once if needed
+# install.packages("kableExtra")
+# install.packages("webshot2")
+
+library(dplyr)
+library(tidyr)
+library(kableExtra)
+library(webshot2)
+
+# -----------------------------
+# Build table (Top 3 actors by %)
+# -----------------------------
+actor_top3_table <- df_sheet3 %>%
+  pivot_longer(
+    cols = c(
+      `Student government leaders or members`,
+      `Individual students`,
+      `Student organizations or groups`,
+      `Alumni`,
+      `Administrators`,
+      `Faculty`
+    ),
+    names_to = "Actor",
+    values_to = "Mentioned"
+  ) %>%
+  filter(Mentioned == "T") %>%
+  group_by(President, Actor) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  left_join(
+    df_sheet3 %>%
+      group_by(President) %>%
+      summarise(Total_Events = n(), .groups = "drop"),
+    by = "President"
+  ) %>%
+  mutate(Percent = Count / Total_Events * 100) %>%
+  group_by(President) %>%
+  arrange(desc(Percent), .by_group = TRUE) %>%
+  slice_head(n = 3) %>%
+  mutate(Rank = c("Top 1", "Top 2", "Top 3")) %>%
+  ungroup() %>%
+  mutate(
+    Actor_with_pct = paste0(Actor, " (", round(Percent, 1), "%)")
+  ) %>%
+  select(Rank, President, Actor_with_pct) %>%
+  pivot_wider(names_from = President, values_from = Actor_with_pct) %>%
+  select(Rank, Ber, Sor, Tre, Bah)
+
+# -----------------------------
+# Color mapping
+# -----------------------------
+actor_colors <- c(
+  "Student government leaders or members" = "#4E79A7",
+  "Individual students" = "#F28E2B",
+  "Student organizations or groups" = "#59A14F",
+  "Alumni" = "#E15759",
+  "Administrators" = "#B07AA1",
+  "Faculty" = "#76B7B2"
+)
+
+# Function to make a smaller "pill" style label
+pill_cell <- function(text) {
+  actor_name <- sub(" \\(.*\\)", "", text)
+  bg <- actor_colors[actor_name]
+
+  if (is.na(bg)) return(text)
+
+  cell_spec(
+    text,
+    format = "html",
+    background = bg,
+    color = "white",
+    bold = TRUE,
+    extra_css = paste(
+      "display:inline-block;",
+      "padding:4px 8px;",
+      "border-radius:12px;",
+      "font-size:13px;",
+      "line-height:1.25;"
+    )
+  )
+}
+
+# Apply pill styling
+table_colored <- actor_top3_table %>%
+  mutate(
+    Ber = sapply(Ber, pill_cell),
+    Sor = sapply(Sor, pill_cell),
+    Tre = sapply(Tre, pill_cell),
+    Bah = sapply(Bah, pill_cell)
+  )
+
+# -----------------------------
+# Render table (clean / Pew-like)
+# -----------------------------
+kbl(
+  table_colored,
+  format = "html",
+  escape = FALSE,
+  align = "lcccc",
+  caption = "Top Three Most Common Actors by Presidency"
+) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "left",
+    font_size = 14
+  ) %>%
+  add_header_above(c(" " = 1, "Presidency" = 4), bold = FALSE) %>%
+  row_spec(0, bold = TRUE, extra_css = "border-bottom: 1px solid #D9D9D9;") %>%
+  row_spec(1:3, extra_css = "vertical-align: middle; height: 56px;") %>%
+  column_spec(1, width = "90px", bold = TRUE) %>%
+  column_spec(2:5, width = "220px") %>%
+  column_spec(2:5, extra_css = "text-align:center;") %>%
+  footnote(
+    general = "Entries show the top three actors in each presidency, based on share of events.",
+    general_title = "Note: "
+  )
+
+# -----------------------------
+# Save table as PNG
+# -----------------------------
+dir.create("observer_figures", showWarnings = FALSE)
+
+save_kable(
+  kbl(
+    table_colored,
+    format = "html",
+    escape = FALSE,
+    align = "lcccc",
+    caption = "Top Three Most Common Actors by Presidency"
+  ) %>%
+    kable_styling(
+      full_width = FALSE,
+      position = "left",
+      font_size = 14,
+      bootstrap_options = c("striped", "condensed")
+    ) %>%
+    row_spec(0, bold = TRUE) %>%
+    row_spec(1:3, extra_css = "vertical-align: middle;") %>%
+    column_spec(1, width = "90px", bold = TRUE) %>%
+    column_spec(2:5, width = "210px") %>%
+    add_header_above(c(" " = 1, "Presidency" = 4)),
+  file = "observer_figures/table.html"
+)
+
+webshot(
+  "observer_figures/table.html",
+  "observer_figures/top_actors_table.png",
+  zoom = 2,
+  selector = "table"
+)
+```
+
+
+```{r}
+#convert topic columns into a long format, then attach the granted value.
+library(dplyr)
+library(tidyr)
+
+topic_granted <- df_sheet3 %>%
+  pivot_longer(
+    cols = c(
+      `Academic Policies`,
+      `Campus Life`,
+      `Student Government`,
+      `Financial/Administrative Decisions`,
+      `Diversity, Equity & Inclusion`,
+      `Activism/Social Movements`,
+      `Facilities/Infrastructure`,
+      `Faculty/Staff Relations`
+    ),
+    names_to = "Topic",
+    values_to = "Mentioned"
+  ) %>%
+  filter(Mentioned == "T")
+```
+
+```{r}
+#Aggregate “Granted” by topic
+topic_power <- topic_granted %>%
+  group_by(Topic) %>%
+  summarise(
+    Granted_Power = sum(Granted, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+
+```{r}
+# Avg Granted by Topic
+topic_power_avg <- topic_granted %>%
+  group_by(Topic) %>%
+  summarise(
+    Avg_Granted = mean(Granted, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(topic_power_avg, aes(x = Avg_Granted, y = reorder(Topic, Avg_Granted))) +
+  geom_col(
+    fill = "#1F5A94",
+    width = 0.55
+  ) +
+  geom_text(
+    aes(label = round(Avg_Granted, 2)),
+    hjust = -0.15,
+    size = 4,
+    color = "#222222"
+  ) +
+  labs(
+    title = "Average Granted Power by Topic Area",
+    subtitle = "Mean level of power granted across topic areas",
+    x = NULL,
+    y = NULL,
+    caption = "Source: Augustana archival analysis"
+  ) +
+  scale_x_continuous(
+    limits = c(0, max(topic_power_avg$Avg_Granted) + 0.5),
+    breaks = seq(0, 5, 1),
+    expand = c(0, 0)
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(
+      face = "bold",
+      size = 16,
+      hjust = 0,
+      margin = margin(b = 5)
+    ),
+    plot.subtitle = element_text(
+      size = 11,
+      color = "#555555",
+      hjust = 0,
+      margin = margin(b = 12)
+    ),
+    plot.caption = element_text(
+      size = 9.5,
+      color = "#666666",
+      hjust = 0,
+      margin = margin(t = 10)
+    ),
+    axis.text.y = element_text(
+      size = 11,
+      color = "#222222"
+    ),
+    axis.text.x = element_text(
+      size = 10.5,
+      color = "#555555"
+    ),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(
+      color = "#D9D9D9",
+      linewidth = 0.4
+    ),
+    axis.ticks = element_blank(),
+    plot.margin = margin(18, 24, 18, 12)
+  )
+
+ggsave("observer_figures/figure4.png", width = 8, height = 5, dpi = 300)
+```
+
+
+```{r}
+##convert topic columns into a long format, then attach the granted value.
+library(dplyr)
+library(tidyr)
+
+topic_progress <- df_sheet3 %>%
+  pivot_longer(
+    cols = c(
+      `Academic Policies`,
+      `Campus Life`,
+      `Student Government`,
+      `Financial/Administrative Decisions`,
+      `Diversity, Equity & Inclusion`,
+      `Activism/Social Movements`,
+      `Facilities/Infrastructure`,
+      `Faculty/Staff Relations`
+    ),
+    names_to = "Topic",
+    values_to = "Mentioned"
+  ) %>%
+  filter(Mentioned == "T")
+```
+
+
+```{r}
+#Aggregate “Power Progress” by topic
+topic_progress_summary <- topic_progress %>%
+  group_by(Topic) %>%
+  summarise(
+    Total_Progress = sum(Progress, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+
+```{r}
+# Avg Power Progress by Topic
+topic_progress_avg <- topic_progress %>%
+  group_by(Topic) %>%
+  summarise(
+    Avg_Progress = mean(Progress, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(topic_progress_avg, aes(x = Avg_Progress, y = reorder(Topic, Avg_Progress))) +
+  geom_col(
+    fill = "#1B9E77",
+    width = 0.55
+  ) +
+  geom_text(
+    aes(label = round(Avg_Progress, 2)),
+    hjust = -0.15,
+    size = 4,
+    color = "#222222"
+  ) +
+  labs(
+    title = "Average Power Progress by Topic Area",
+    subtitle = "Mean level of progress achieved across topic areas",
+    x = NULL,
+    y = NULL,
+    caption = "Source: Augustana archival analysis"
+  ) +
+  scale_x_continuous(
+    limits = c(0, max(topic_progress_avg$Avg_Progress) + 0.5),
+    breaks = seq(0, 5, 1),
+    expand = c(0, 0)
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(
+      face = "bold",
+      size = 16,
+      hjust = 0,
+      margin = margin(b = 5)
+    ),
+    plot.subtitle = element_text(
+      size = 11,
+      color = "#555555",
+      hjust = 0,
+      margin = margin(b = 12)
+    ),
+    plot.caption = element_text(
+      size = 9.5,
+      color = "#666666",
+      hjust = 0,
+      margin = margin(t = 10)
+    ),
+    axis.text.y = element_text(
+      size = 11,
+      color = "#222222"
+    ),
+    axis.text.x = element_text(
+      size = 10.5,
+      color = "#555555"
+    ),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(
+      color = "#D9D9D9",
+      linewidth = 0.4
+    ),
+    axis.ticks = element_blank(),
+    plot.margin = margin(18, 24, 18, 12)
+  )
+
+ggsave("observer_figures/figure5.png", width = 8, height = 5, dpi = 300)
+```
+

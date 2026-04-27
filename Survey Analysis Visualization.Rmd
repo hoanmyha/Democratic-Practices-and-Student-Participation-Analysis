@@ -1,0 +1,751 @@
+---
+title: "Survey Analysis"
+author: "My Ha"
+date: "2026-04-03"
+output: html_document
+---
+
+```{r}
+# Install packages 
+#install.packages(c("tidyverse", "scales"))
+install.packages("readxl")
+
+# Load libraries
+library(tidyverse)  # for data manipulation and plotting
+library(scales)     # for percent formatting on x-axis
+library(readxl)
+```
+
+```{r}
+# Read cleaned data
+df_clean <- read_csv("cleaned_survey_data.csv")
+
+# Check column names if needed
+names(df_clean)
+```
+
+**Inclusive charts**
+
+```{r}
+# Inclusiveness questions
+inclusion_vars <- c(
+  "As a group, domestically diverse students (who identify as People of Color) play a significant role in making important decisions at Augustana.",
+  "As a group, domestically diverse students (who identify as People of Color) are regularly included in spaces where important decisions are discussed.",
+  "International students are regularly included in spaces where important decisions are discussed.",
+  "Students at Augustana are regularly included in spaces where important decisions are discussed.",
+  "In general, Augustana College provides opportunities for students to express their opinions regarding important decisions."
+)
+
+# Create White vs Students of Color grouping and invloved vs non-invloved grouping
+df_clean <- df_clean %>%
+  mutate(
+    race_group = case_when(
+      race_ethnicity == "White" ~ "White",
+      race_ethnicity %in% c(
+        "Asian or Pacific Islander",
+        "Black or African American",
+        "Hispanic or Latino",
+        "Multiracial or Biracial",
+        "A race/ethnicity not listed here"
+      ) ~ "Students of Color",
+      TRUE ~ NA_character_
+    ),
+    involvement_group = case_when(
+      `Are you/were you involved at Augustana College in any of the categories below? Mark all that apply.` == "None" ~ "Not involved",
+      is.na(`Are you/were you involved at Augustana College in any of the categories below? Mark all that apply.`) ~ NA_character_,
+      TRUE ~ "Involved"
+    )
+  )
+```
+
+```{r}
+# Reshape to long format
+df_long <- df_clean %>%
+  select(student_status, race_group, involvement_group, all_of(inclusion_vars)) %>%
+  pivot_longer(
+    cols = all_of(inclusion_vars),
+    names_to = "question",
+    values_to = "response"
+  ) %>%
+  mutate(
+    agree = if_else(response %in% c("Agree", "Strongly agree"), 1, 0, missing = NA_real_),
+    question_short = case_when(
+      question == "As a group, domestically diverse students (who identify as People of Color) play a significant role in making important decisions at Augustana." ~ "SOC play role",
+      question == "As a group, domestically diverse students (who identify as People of Color) are regularly included in spaces where important decisions are discussed." ~ "SOC included",
+      question == "International students are regularly included in spaces where important decisions are discussed." ~ "International included",
+      question == "Students at Augustana are regularly included in spaces where important decisions are discussed." ~ "Students included",
+      question == "In general, Augustana College provides opportunities for students to express their opinions regarding important decisions." ~ "Students' opportunities to express opinions"
+    )
+  )
+```
+
+```{r}
+# Overall inclusion (all students together)
+inclusion_overall <- df_long %>%
+  filter(!is.na(agree)) %>%
+  group_by(question_short) %>%
+  summarise(
+    percent_agree = mean(agree) * 100,
+    .groups = "drop"
+  )
+# Set order
+inclusion_overall$question_short <- factor(
+  inclusion_overall$question_short,
+  levels = c(
+    "Students included",
+    "Students' opportunities to express opinions",
+    "International included",
+    "SOC included",
+    "SOC play role"
+  )
+)
+```
+
+
+```{r}
+#Intl vs domestic
+inclusion_status <- df_long %>%
+  filter(!is.na(student_status), !is.na(agree)) %>%
+  group_by(student_status, question_short) %>%
+  summarise(
+    percent_agree = mean(agree) * 100,
+    .groups = "drop"
+  )
+```
+
+```{r}
+#White vs Student of Color
+inclusion_race <- df_long %>%
+  filter(!is.na(race_group), !is.na(agree)) %>%
+  group_by(race_group, question_short) %>%
+  summarise(
+    percent_agree = mean(agree) * 100,
+    .groups = "drop"
+  )
+# Set order for consistent bar position
+inclusion_race$race_group <- factor(
+  inclusion_race$race_group,
+  levels = c("White", "Students of Color")
+)
+```
+
+```{r}
+# Involved vs Not involved
+inclusion_involvement <- df_long %>%
+  filter(!is.na(involvement_group), !is.na(agree)) %>%
+  group_by(involvement_group, question_short) %>%
+  summarise(
+    percent_agree = mean(agree) * 100,
+    .groups = "drop"
+  )
+```
+
+
+```{r}
+# Overall Inclusion Chart (all students) — publication style
+ggplot(inclusion_overall, aes(x = percent_agree, y = question_short)) +
+  geom_col(fill = "#2C7FB8", width = 0.55) +
+  geom_text(
+    aes(label = paste0(round(percent_agree, 0), "%")),
+    hjust = -0.15,
+    size = 4.2,
+    family = "sans"
+  ) +
+  labs(
+    title = "Overall Inclusion in Decision Spaces",
+    subtitle = "Share of students who agree or strongly agree with each statement",
+    x = NULL,
+    y = NULL,
+    caption = "Source: Augustana student survey"
+  ) +
+  scale_x_continuous(
+    limits = c(0, 105),
+    breaks = seq(0, 100, 20),
+    labels = function(x) paste0(x, "%"),
+    expand = c(0, 0)
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(
+      face = "bold",
+      size = 16,
+      hjust = 0,
+      margin = margin(b = 6)
+    ),
+    plot.subtitle = element_text(
+      size = 11.5,
+      color = "#555555",
+      hjust = 0,
+      margin = margin(b = 14)
+    ),
+    plot.caption = element_text(
+      size = 9.5,
+      color = "#666666",
+      hjust = 0,
+      margin = margin(t = 12)
+    ),
+    axis.text.y = element_text(
+      size = 11.5,
+      color = "#222222",
+      margin = margin(r = 8)
+    ),
+    axis.text.x = element_text(
+      size = 10.5,
+      color = "#555555"
+    ),
+    axis.title.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(
+      color = "#D9D9D9",
+      linewidth = 0.4
+    ),
+    axis.ticks = element_blank(),
+    plot.margin = margin(30, 30, 20, 20)
+  )
+
+ggsave("figures/figure1.png", width =9, height = 5, dpi = 300)
+```
+
+Overall, students believe that they are not included in decision-making process (range form 20-40% agreement). 
+More importantly, the statement "Students at Augustana are regularly included in spaces where important decisions are discussed", around 140 students disagree with this statement and only around 70 students agree, which is half the amount.
+
+```{r}
+# Thought about inclusiveness (all): Domestic vs International Student
+ggplot(inclusion_status, aes(x = question_short, y = percent_agree, fill = student_status)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Inclusion in Decision Spaces: Domestic vs International Students",
+    x = NULL,
+    y = "% Agree / Strongly Agree",
+    fill = NULL
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), limits = c(0, 100)) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    legend.position = "top"
+  )
+```
+
+```{r}
+ggplot(
+  inclusion_status %>%
+    filter(question_short %in% c("International included", "Students included")),
+  aes(x = question_short, y = percent_agree, fill = student_status)
+) +
+  geom_col(
+    position = position_dodge(width = 0.7),
+    width = 0.45
+  ) +
+  geom_text(
+    aes(label = paste0(round(percent_agree, 0), "%")),
+    position = position_dodge(width = 0.7),
+    vjust = -0.35,
+    size = 4
+  ) +
+  scale_fill_manual(values = c(
+    "Domestic Student" = "#1F5A94",
+    "International Student" = "#D97A2B"
+  )) +
+  labs(
+    title = "Inclusion in Decision Spaces: Domestic vs. International Students",
+    subtitle = "Share of students who agree or strongly agree",
+    x = NULL,
+    y = NULL,
+    fill = NULL,
+    caption = "Source: Augustana student survey"
+  ) +
+  scale_y_continuous(
+    limits = c(0, 105),
+    breaks = seq(0, 100, 20),
+    labels = function(x) paste0(x, "%"),
+    expand = c(0, 0)
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15.5, hjust = 0),
+    plot.subtitle = element_text(size = 11, color = "#555555"),
+    plot.caption = element_text(size = 9.5, color = "#666666", hjust = 0),
+    axis.text.x = element_text(size = 11, color = "#222222"),
+    axis.text.y = element_text(size = 10.5, color = "#555555"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(color = "#D9D9D9", linewidth = 0.4),
+    axis.ticks = element_blank(),
+    legend.position = "top",
+    plot.margin = margin(18, 18, 18, 12)
+  )
+
+ggsave("figures/figure2.png", width = 8, height = 5, dpi = 300)
+```
+
+Potential comments:
+
+-   Domestic students believe international students are included more than international students themselves report (40% vs 25%)
+
+-   Both domestic and international students feel less included when it comes to decision-making (under 25%)
+
+```{r}
+# Thought about inclusiveness (all): White vs Students of color
+ggplot(inclusion_race, aes(x = question_short, y = percent_agree, fill = race_group)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Inclusion in Decision Spaces: White vs Students of Color",
+    x = NULL,
+    y = "% Agree / Strongly Agree",
+    fill = NULL
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), limits = c(0, 100)) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    legend.position = "top"
+  )
+```
+
+```{r}
+# Thought about inclusiveness (focus): White vs Students of Color (Pew-style)
+ggplot(
+  inclusion_race %>%
+    filter(question_short %in% c("SOC included", "Students included")),
+  aes(x = question_short, y = percent_agree, fill = race_group)
+) +
+  geom_col(
+    position = position_dodge(width = 0.7),
+    width = 0.45
+  ) +
+  geom_text(
+    aes(label = paste0(round(percent_agree, 0), "%")),
+    position = position_dodge(width = 0.7),
+    vjust = -0.35,
+    size = 4
+  ) +
+  scale_fill_manual(values = c(
+    "White" = "#4C9A2A",              # softer green
+    "Students of Color" = "#C43C39"   # muted red
+  )) +
+  labs(
+    title = "Inclusion in Decision Spaces: White vs. Students of Color",
+    subtitle = "Share of students who agree or strongly agree",
+    x = NULL,
+    y = NULL,
+    fill = NULL,
+    caption = "Source: Augustana student survey"
+  ) +
+  scale_y_continuous(
+    limits = c(0, 105),
+    breaks = seq(0, 100, 20),
+    labels = function(x) paste0(x, "%"),
+    expand = c(0, 0)
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(
+      face = "bold",
+      size = 15.5,
+      hjust = 0,
+      margin = margin(b = 5)
+    ),
+    plot.subtitle = element_text(
+      size = 11,
+      color = "#555555",
+      hjust = 0,
+      margin = margin(b = 10)
+    ),
+    plot.caption = element_text(
+      size = 9.5,
+      color = "#666666",
+      hjust = 0,
+      margin = margin(t = 10)
+    ),
+    axis.text.x = element_text(
+      size = 11,
+      color = "#222222"
+    ),
+    axis.text.y = element_text(
+      size = 10.5,
+      color = "#555555"
+    ),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(
+      color = "#D9D9D9",
+      linewidth = 0.4
+    ),
+    axis.ticks = element_blank(),
+    legend.position = "top",
+    legend.text = element_text(size = 10.5),
+    plot.margin = margin(18, 18, 18, 12)
+  )
+
+ggsave("figures/figure3.png", width = 8, height = 5, dpi = 300)
+```
+
+Potential comments:
+-  Students of color believe they are included more than White students think Students of color are, which is pretty unexpected. However, the difference is not very significant  (40% vs 30%) 
+
+- Both students of colors and white students feel less included when it comes to decision-making (under 25%)
+
+```{r}
+# Thought about inclusion: Involved vs Not Involved Students
+ggplot(inclusion_involvement, aes(x = question_short, y = percent_agree, fill = involvement_group)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c(
+    "Involved" = "#6a3d9a",
+    "Not involved" = "#bdbdbd"
+  )) +
+  labs(
+    title = "Inclusion in Decision Spaces: Involved vs Not Involved Students",
+    x = NULL,
+    y = "% Agree / Strongly Agree",
+    fill = NULL
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), limits = c(0, 100)) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 25, hjust = 1),
+    legend.position = "top"
+  )
+
+ggsave("figures/figure4.png", width = 8, height = 5, dpi = 300)
+```
+```{r}
+# Thought about inclusion: Involved vs Not Involved Students (Pew-style)
+ggplot(inclusion_involvement, aes(x = percent_agree, y = question_short, fill = involvement_group)) +
+  geom_col(
+    position = position_dodge(width = 0.72),
+    width = 0.55
+  ) +
+  geom_text(
+    aes(label = paste0(round(percent_agree, 0), "%")),
+    position = position_dodge(width = 0.72),
+    hjust = -0.15,
+    size = 4
+  ) +
+  scale_fill_manual(values = c(
+    "Involved" = "#5B2C83",       # refined purple
+    "Not involved" = "#9E9E9E"    # neutral gray
+  )) +
+  labs(
+    title = "Inclusion in Decision Spaces: Involved vs. Not Involved Students",
+    subtitle = "Share of students who agree or strongly agree",
+    x = NULL,
+    y = NULL,
+    fill = NULL,
+    caption = "Source: Augustana student survey"
+  ) +
+  scale_x_continuous(
+    limits = c(0, 105),
+    breaks = seq(0, 100, 20),
+    labels = function(x) paste0(x, "%"),
+    expand = c(0, 0)
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(
+      face = "bold",
+      size = 15.5,
+      hjust = 0,
+      margin = margin(b = 5)
+    ),
+    plot.subtitle = element_text(
+      size = 11,
+      color = "#555555",
+      hjust = 0,
+      margin = margin(b = 12)
+    ),
+    plot.caption = element_text(
+      size = 9.5,
+      color = "#666666",
+      hjust = 0,
+      margin = margin(t = 10)
+    ),
+    axis.text.y = element_text(
+      size = 11.5,
+      color = "#222222",
+      margin = margin(r = 8)
+    ),
+    axis.text.x = element_text(
+      size = 10.5,
+      color = "#555555"
+    ),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(
+      color = "#D9D9D9",
+      linewidth = 0.4
+    ),
+    axis.ticks = element_blank(),
+    legend.position = "top",
+    legend.text = element_text(size = 10.5),
+    plot.margin = margin(18, 28, 18, 12)
+  )
+ggsave("figures/figure4.2.png", width = 9, height = 5, dpi = 300)
+```
+
+Potential comments:
+-  Students who are more engaged in institutional processes are more critical of inclusion.
+- This can be due to involved students may recognize more gaps when they involved in real decision-making space.
+
+##Considered Judgement
+
+```{r}
+# Considered Judgment questions
+considered_judgment_vars <- c(
+  "Most students do not have the ability to understand complex decisions that are made at Augustana that impact them (for example: changes to the curriculum or eliminating J-Term).",
+  "If provided with enough information, most students have the ability to understand complex decisions that are made here (For example: changes to the curriculum or eliminating J-Term).",
+  "Most students do not have access to the necessary information to weigh in on important decisions made at Augustana.",
+  "Most students feel that the time and effort required to participate in decision-making at Augustana is more than they can reasonably give.",
+  "Student input is often not sought because decision-makers (faculty, staff and/or administration) recognize the time constraints on students.",
+  "Most students have the time to participate in making important decisions at Augustana."
+)
+```
+
+```{r}
+negative_cj_items <- c(
+  "Most students do not have the ability to understand complex decisions that are made at Augustana that impact them (for example: changes to the curriculum or eliminating J-Term).",
+  "Most students do not have access to the necessary information to weigh in on important decisions made at Augustana.",
+  "Most students feel that the time and effort required to participate in decision-making at Augustana is more than they can reasonably give.",
+  "Student input is often not sought because decision-makers (faculty, staff and/or administration) recognize the time constraints on students."
+)
+```
+
+```{r}
+# reshape and reverse-code the response direction
+cj_long <- df_clean %>%
+  select(all_of(considered_judgment_vars)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "question",
+    values_to = "response"
+  ) %>%
+  filter(!is.na(response), response != "Don't Know/No Answer") %>%
+  mutate(
+    question_short = case_when(
+      question == "Most students do not have the ability to understand complex decisions that are made at Augustana that impact them (for example: changes to the curriculum or eliminating J-Term)." ~ 
+        "Students lack ability to understand complex decisions",
+
+      question == "If provided with enough information, most students have the ability to understand complex decisions that are made here (For example: changes to the curriculum or eliminating J-Term)." ~ 
+        "Students can understand if provided with enough information",
+
+      question == "Most students do not have access to the necessary information to weigh in on important decisions made at Augustana." ~ 
+        "Students lack information",
+
+      question == "Most students feel that the time and effort required to participate in decision-making at Augustana is more than they can reasonably give." ~ 
+        "Students think it is too much time/effort to participate in decision-making in general",
+
+      question == "Student input is often not sought because decision-makers (faculty, staff and/or administration) recognize the time constraints on students." ~ 
+        "Input not sought because students are viewed as busy",
+
+      question == "Most students have the time to participate in making important decisions at Augustana." ~ 
+        "Students have enough time to participate in making important decisions",
+
+      TRUE ~ question
+    ),
+    response_plot = response
+  )
+```
+
+```{r}
+# calculate percentage without Neutral
+cj_summary <- cj_long %>%
+  filter(response_plot %in% c("Strongly disagree", "Disagree", "Agree", "Strongly agree")) %>%
+  group_by(question_short, response_plot) %>%
+  summarise(n = n(), .groups = "drop_last") %>%
+  mutate(percent = n / sum(n) * 100) %>%
+  ungroup()
+```
+
+```{r}
+# build cj_plot
+cj_plot <- cj_summary %>%
+  mutate(
+    plot_percent = case_when(
+      response_plot %in% c("Strongly disagree", "Disagree") ~ -percent,
+      response_plot %in% c("Agree", "Strongly agree") ~ percent
+    )
+  ) %>%
+  filter(!is.na(plot_percent))
+```
+
+```{r}
+# set factor orders
+cj_plot$question_short <- factor(
+  cj_plot$question_short,
+  levels = c(
+    "Students can understand if provided with enough information",
+    "Students lack information",
+    "Students lack ability to understand complex decisions",
+    "Input not sought because students are viewed as busy",
+    "Students have enough time to participate in making important decisions",
+    "Students think it is too much time/effort to participate in decision-making in general"
+  )
+)
+
+cj_plot$response_plot <- factor(
+  cj_plot$response_plot,
+  levels = c("Disagree", "Strongly disagree", "Agree", "Strongly agree")
+)
+```
+
+```{r}
+#Student Capacity and Barriers to Participating in Decision-Making
+ggplot(cj_plot, aes(x = question_short, y = plot_percent, fill = response_plot)) +
+  geom_col(width = 0.65, position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  scale_y_continuous(
+  labels = function(x) paste0(abs(x), "%"),
+  breaks = seq(-100, 100, 20),
+  limits = c(-100, 105),
+  expand = expansion(mult = c(0, 0.02))
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Strongly disagree" = "#B54A3A",
+      "Disagree" = "#E6A57E",
+      "Agree" = "#7FA9C9",
+      "Strongly agree" = "#2F6C99"
+    ),
+    breaks = c("Strongly disagree", "Disagree", "Agree", "Strongly agree"),
+    na.translate = FALSE
+  ) +
+  labs(
+    title = "Student Capacity and Barriers to Participating in Decision-Making",
+    subtitle = "Share of students expressing disagreement versus agreement",
+    x = NULL,
+    y = "% of Responses",
+    fill = NULL,
+    caption = "Source: Augustana student survey"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15.5, hjust = 0),
+    plot.subtitle = element_text(size = 11, color = "#555555", hjust = 0),
+    plot.caption = element_text(size = 9.5, color = "#666666", hjust = 0),
+    axis.text.y = element_text(size = 11, color = "#222222"),
+    axis.text.x = element_text(size = 10.5, color = "#555555"),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(color = "#D9D9D9", linewidth = 0.4),
+    axis.ticks = element_blank(),
+    legend.position = "top"
+  )
+
+ggsave("figures/figure5.png", width = 12.5, height = 5, dpi = 300)
+```
+
+##Transparency Charts##
+
+```{r}
+# Transparency questions
+transparency_vars <- c(
+  "Important decisions made by the college and that impact the lives of students are clearly communicated to the student body.",
+  "Important decisions made by the college and that impact the lives of students are communicated to the student body in a timely manner.",
+  "The reasoning and steps leading to major decisions made by the college are clearly explained to students."
+)
+```
+
+```{r}
+# Reshape to long format
+transparency_long <- df_clean %>%
+  select(student_status, race_group, involvement_group, all_of(transparency_vars)) %>%
+  pivot_longer(
+    cols = all_of(transparency_vars),
+    names_to = "question",
+    values_to = "response"
+  ) %>%
+  mutate(
+    agree = if_else(response %in% c("Agree", "Strongly agree"), 1, 0, missing = NA_real_),
+    question_short = case_when(
+      question == "Important decisions made by the college and that impact the lives of students are clearly communicated to the student body." ~ "Clearly communicated",
+      question == "Important decisions made by the college and that impact the lives of students are communicated to the student body in a timely manner." ~ "Communicated in a timely manner",
+      question == "The reasoning and steps leading to major decisions made by the college are clearly explained to students." ~ "Reasoning clearly explained",
+      TRUE ~ question
+    )
+  )
+```
+
+```{r}
+# Transparency summary (no grouping)
+transparency_summary <- transparency_long %>%
+  filter(!is.na(agree)) %>%
+  group_by(question_short) %>%
+  summarise(
+    percent_agree = mean(agree) * 100,
+    .groups = "drop"
+  )
+```
+
+
+```{r}
+#Horizontal Bar chart: How Transparent Is Decision-Making at Augustana
+ggplot(transparency_summary, aes(x = percent_agree, y = question_short)) +
+  geom_col(fill = "#1F5A94", width = 0.52) +
+  geom_text(
+    aes(label = paste0(round(percent_agree, 0), "%")),
+    hjust = -0.18,
+    size = 4,
+    color = "#222222"
+  ) +
+  labs(
+    title = "How Transparent Is Decision-Making at Augustana?",
+    subtitle = "Share of students who agree or strongly agree with each statement",
+    x = NULL,
+    y = NULL,
+    caption = "Source: Augustana student survey"
+  ) +
+  scale_x_continuous(
+    labels = function(x) paste0(x, "%"),
+    limits = c(0, 105),
+    breaks = seq(0, 100, 20),
+    expand = c(0, 0)
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(
+      face = "bold",
+      size = 16,
+      hjust = 0,
+      margin = margin(b = 5)
+    ),
+    plot.subtitle = element_text(
+      size = 11,
+      color = "#555555",
+      hjust = 0,
+      margin = margin(b = 12)
+    ),
+    plot.caption = element_text(
+      size = 9.5,
+      color = "#666666",
+      hjust = 0,
+      margin = margin(t = 10)
+    ),
+    axis.text.y = element_text(
+      size = 11.5,
+      color = "#222222",
+      margin = margin(r = 8)
+    ),
+    axis.text.x = element_text(
+      size = 10.5,
+      color = "#555555"
+    ),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(
+      color = "#D9D9D9",
+      linewidth = 0.4
+    ),
+    axis.ticks = element_blank(),
+    plot.margin = margin(18, 30, 18, 12)
+  )
+
+ggsave("figures/figure6.png", width = 8.2, height = 5, dpi = 300)
+```
+
+```{r}
+# create folder to save all the fugures (run once)
+#dir.create("figures")
+```
+
+
